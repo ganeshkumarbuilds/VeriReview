@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-api_key = os.getenv("OPENROUTER_API_KEY")
+api_key = os.getenv("LLM_API_KEY")
 
 response = requests.get(
     "https://openrouter.ai/api/v1/models",

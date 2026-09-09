@@ -72,7 +72,7 @@ frontend/
 cd backend
 .\venv\Scripts\Activate.ps1   # or: python -m venv venv; venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env        # then set OPENROUTER_API_KEY and DATABASE_URL
+copy .env.example .env        # then set LLM_API_KEY and DATABASE_URL
 python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -119,7 +119,7 @@ project data is never shared across accounts.
 - **Backend** (Render / Railway / Fly, root `backend/`): build
   `pip install -r requirements.txt`, start
   `uvicorn main:app --host 0.0.0.0 --port $PORT`, with env vars
-  `OPENROUTER_API_KEY` and `DATABASE_URL` (hosted Postgres).
+  `LLM_API_KEY` and `DATABASE_URL` (hosted Postgres).
 - **Frontend** (Vercel / Netlify, root `frontend/`): build `npm run build`,
   output `dist`, env var `VITE_API_URL=https://<your-backend>` (rebuild after
   setting — Vite bakes it in at build time).

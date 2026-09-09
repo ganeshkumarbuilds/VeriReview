@@ -4,15 +4,16 @@ from openai import OpenAI
 
 load_dotenv()
 
-api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+base_url = (os.getenv("LLM_BASE_URL") or "https://openrouter.ai/api/v1").rstrip("/")
+api_key = os.getenv("LLM_API_KEY")
 
 client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
+    base_url=base_url,
     api_key=api_key,
 )
 
 response = client.chat.completions.create(
-    model="nvidia/nemotron-3-super-120b-a12b:free",
+    model=(os.getenv("LLM_MODELS") or "nemotron-3-ultra-free").split(",")[0].strip(),
     messages=[{"role": "user", "content": "Say hello in one short sentence."}],
 )
 

@@ -8,8 +8,8 @@ function humanizeReport(text) {
   if (/rate limit exceeded|free-models-per-day|daily reset/i.test(s)) {
     return "AI models unavailable: the OpenRouter free-tier daily quota is exhausted (50 calls/day, resets midnight UTC). Add $10 credits for 1000/day, or wait for reset and run again.";
   }
-  if (/api key rejected|OPENROUTER_API_KEY|unauthorized|401/i.test(s)) {
-    return "AI models unavailable: the backend API key was rejected. Check OPENROUTER_API_KEY and run again.";
+  if (/api key rejected|LLM_API_KEY|unauthorized|401/i.test(s)) {
+    return "AI models unavailable: the backend API key was rejected. Check LLM_API_KEY and run again.";
   }
   if (s.includes("user_id")) return s.split("\n")[0].slice(0, 220);
   return s;

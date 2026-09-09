@@ -44,7 +44,7 @@ export function parseApiKeys(text) {
 }
 
 const QUOTA_RE = /rate limit exceeded|free-models-per-day|daily reset/i;
-const AUTH_RE = /api key rejected|OPENROUTER_API_KEY|unauthorized|401/i;
+const AUTH_RE = /api key rejected|LLM_API_KEY|unauthorized|401/i;
 
 export function humanizeReport(text) {
   const s = String(text || "");
@@ -53,7 +53,7 @@ export function humanizeReport(text) {
     return "AI models unavailable: the OpenRouter free-tier daily quota is exhausted (50 calls/day, resets midnight UTC). Add $10 credits for 1000/day, or wait for reset and run again.";
   }
   if (AUTH_RE.test(s)) {
-    return "AI models unavailable: the backend API key was rejected. Check OPENROUTER_API_KEY and run again.";
+    return "AI models unavailable: the backend API key was rejected. Check LLM_API_KEY and run again.";
   }
   // Never show raw provider JSON blobs (they leak user ids) — keep first line.
   if (s.includes("'user_id'") || s.includes("user_id")) {

@@ -1,3 +1,4 @@
+import copy
 import json
 import time
 from langgraph.graph import StateGraph, END
@@ -27,20 +28,50 @@ def _clean_code_text(raw_text: str) -> str:
     return raw_text.strip()
 
 
+class AIUnavailableError(RuntimeError):
+    """Raised when the configured AI provider cannot serve the request."""
+
+
+def _is_provider_unavailable(error: Exception) -> bool:
+    msg = str(error or "").lower()
+    return any(marker in msg for marker in (
+        "429",
+        "rate limit",
+        "rate_limit",
+        "quota",
+        "too many requests",
+        "401",
+        "unauthorized",
+        "invalid api key",
+        "invalid_api_key",
+        "authentication",
+    ))
+
+
 def _invoke_with_fallback(prompt: str, temperature: float = 0.2):
+    """Call the configured models without retrying account-level failures.
+
+    A provider/account failure such as 401 or 429 must not be treated as a
+    model-specific failure. Retrying other free models only burns quota and
+    produces misleading downstream results.
+    """
     last_error = None
     for model_name in FREE_MODELS:
-        llm = get_llm(model_name, temperature=temperature)
         try:
+            llm = get_llm(model_name, temperature=temperature)
             print(f"[llm] Trying model: {model_name}")
             response = llm.invoke(prompt)
             print(f"[llm] Success with model: {model_name}")
             return response
         except Exception as e:
             print(f"[llm] {model_name} failed: {e}")
+            if _is_provider_unavailable(e):
+                raise AIUnavailableError(friendly_llm_error(e)) from e
             last_error = e
             time.sleep(1)
-    raise last_error
+    if last_error is not None:
+        raise last_error
+    raise AIUnavailableError("No LLM model is configured.")
 
 
 DEFAULT_STACK = "Spring Boot + React"
@@ -70,24 +101,45 @@ def normalize_stack(tech_stack: str) -> str:
 
 
 def friendly_llm_error(e: Exception) -> str:
+    if isinstance(e, AIUnavailableError):
+        return str(e)
     msg = str(e)
-    if "429" in msg or "Rate limit" in msg or "rate limit" in msg:
-        return ("AI model quota exhausted (OpenRouter free-tier daily limit). "
-                "Wait for the daily reset or add credits, then run again.")
-    if "401" in msg or "Unauthorized" in msg or "invalid" in msg.lower():
-        return "AI API key rejected. Check OPENROUTER_API_KEY on the backend."
+    lower = msg.lower()
+    if "429" in msg or "rate limit" in lower or "quota" in lower or "too many requests" in lower:
+        return (
+            "AI model quota exhausted or rate-limited by the configured provider. "
+            "Wait for the provider reset, add credits, or configure another available provider."
+        )
+    if "401" in msg or "unauthorized" in lower or "invalid api key" in lower or "authentication" in lower:
+        return "AI API key rejected. Check LLM_API_KEY on the backend."
     return f"AI call failed: {msg[:200]}"
 
 
-def mark_generation_failed(state: dict, e: Exception) -> None:
+def mark_generation_failed(state: dict, e: Exception, stage: str = "") -> None:
     state["generation_failed"] = True
     err = friendly_llm_error(e)
     prev = state.get("generation_error") or ""
     state["generation_error"] = (prev + " | " + err) if prev and err not in prev else (prev or err)
 
+    if isinstance(e, AIUnavailableError) or _is_provider_unavailable(e):
+        state["ai_status"] = "unavailable"
+        state["ai_error"] = state["generation_error"]
+        state["ai_failed_stage"] = stage
+
+
+def _ai_blocked(state: dict, stage: str) -> bool:
+    if state.get("ai_status") != "unavailable":
+        return False
+    state.setdefault("steps_log", []).append(
+        f"{stage}: BLOCKED - AI provider unavailable; waiting for provider recovery"
+    )
+    return True
+
 
 # --- Agent 1: Product Manager ---
 def product_manager_node(state: ReviewState) -> ReviewState:
+    if _ai_blocked(state, "PLAN"):
+        return state
     prompt = f"""You are a product manager. Turn this idea into a precise, buildable spec.
 
 Idea: {state['task']}
@@ -101,6 +153,7 @@ Be concise and concrete.
         response = _invoke_with_fallback(prompt, temperature=0.3)
         spec = response.content.strip()
     except Exception as e:
+        mark_generation_failed(state, e, "plan")
         spec = f"Product spec unavailable: {friendly_llm_error(e)}"
 
     state["product_spec"] = spec
@@ -118,6 +171,8 @@ Be concise and concrete.
 
 # --- Agent 2: Architect ---
 def architect_node(state: ReviewState) -> ReviewState:
+    if _ai_blocked(state, "ARCHITECT"):
+        return state
     tech_stack = state.get('tech_stack') or DEFAULT_STACK
     prompt = f"""You are a software architect specializing in {tech_stack}.
 
@@ -131,6 +186,7 @@ Design the system architecture: module/package structure, REST API endpoints
         response = _invoke_with_fallback(prompt, temperature=0.3)
         architecture = response.content.strip()
     except Exception as e:
+        mark_generation_failed(state, e, "architect")
         architecture = f"Architecture unavailable: {friendly_llm_error(e)}"
 
     state["architecture"] = architecture
@@ -140,6 +196,8 @@ Design the system architecture: module/package structure, REST API endpoints
 
 # --- Agent 3: Database Engineer ---
 def database_engineer_node(state: ReviewState) -> ReviewState:
+    if _ai_blocked(state, "ARCHITECT"):
+        return state
     prompt = f"""You are a database engineer. Design the data model.
 
 Architecture:
@@ -152,6 +210,7 @@ Concise bullet list, no code.
         response = _invoke_with_fallback(prompt, temperature=0.2)
         db_design = response.content.strip()
     except Exception as e:
+        mark_generation_failed(state, e, "architect")
         db_design = f"Database design unavailable: {friendly_llm_error(e)}"
 
     state["database_design"] = db_design
@@ -206,6 +265,8 @@ def _backend_instructions(family: str) -> tuple:
 
 
 def backend_engineer_node(state: ReviewState) -> ReviewState:
+    if _ai_blocked(state, "BUILD"):
+        return state
     tech_stack = state.get('tech_stack') or DEFAULT_STACK
     family = state.get('stack_family') or detect_family(tech_stack)
     role, instructions, error_prefix = _backend_instructions(family)
@@ -244,7 +305,7 @@ Respond with ONLY the code (using the FILE: markers), no explanation.
         code = _clean_code_text(response.content)
     except Exception as e:
         code = f"{error_prefix}{friendly_llm_error(e)}"
-        mark_generation_failed(state, e)
+        mark_generation_failed(state, e, "build")
 
     state["backend_code"] = code
     state["diff"] = code
@@ -256,6 +317,8 @@ Respond with ONLY the code (using the FILE: markers), no explanation.
 
 # --- Retrieval (RAG tool) ---
 def retrieve_context_node(state: ReviewState) -> ReviewState:
+    if _ai_blocked(state, "REVIEW"):
+        return state
     context = retrieve_context(state["diff"])
     state["context"] = context
     state["steps_log"].append("Retrieved relevant backend/OWASP context for review")
@@ -265,6 +328,9 @@ def retrieve_context_node(state: ReviewState) -> ReviewState:
 # --- REVIEW stage: Reviewer (single batched scan) + finding verifier ---
 # Perf: one LLM call for ALL files instead of one call per file.
 def reviewer_node(state: ReviewState) -> ReviewState:
+    if _ai_blocked(state, "REVIEW"):
+        state["review_passed"] = False
+        return state
     files = {name: content for name, content in parse_files(state["diff"]).items() if content.strip()}
     if not files:
         state["raw_findings"] = []
@@ -298,7 +364,8 @@ Files:
                 f["file"] = next(iter(files))
             all_findings.append(f)
     except Exception as e:
-        state["steps_log"].append(f"Analysis failed: {friendly_llm_error(e)}")
+        mark_generation_failed(state, e, "review")
+        state["steps_log"].append(f"Analysis unavailable: {friendly_llm_error(e)}")
 
     state["raw_findings"] = all_findings
     state["steps_log"].append(f"REVIEW: Reviewer scanned {len(files)} file(s), found {len(all_findings)} candidate issue(s)")
@@ -309,6 +376,9 @@ Files:
 # Checks the implementation against the original task/requirements.
 # Sets requirements_met used by the PASS/FAIL gate.
 def verifier_node(state: ReviewState) -> ReviewState:
+    if _ai_blocked(state, "VERIFY"):
+        state["requirements_met"] = False
+        return state
     prompt = f"""You are a verification engineer checking whether the implementation satisfies the original task.
 
 Original task:
@@ -334,7 +404,8 @@ Respond ONLY with valid JSON: {{"verdict": "PASS", "reasoning": "one sentence"}}
         raw_text = _clean_json_text(response.content)
         verdict = json.loads(raw_text)
     except Exception as e:
-        verdict = {"verdict": "FAIL", "reasoning": f"Verification unavailable: {friendly_llm_error(e)}"}
+        mark_generation_failed(state, e, "verify")
+        verdict = {"verdict": "UNAVAILABLE", "reasoning": f"Verification unavailable: {friendly_llm_error(e)}"}
 
     requirements_met = verdict.get("verdict") == "PASS"
     state["verification_report"] = verdict.get("reasoning", "")
@@ -363,6 +434,14 @@ def increment_revision_node(state: ReviewState) -> ReviewState:
 
 def finding_verifier_node(state: ReviewState) -> ReviewState:
     """Second half of REVIEW: confirm/reject all candidates in ONE batched call."""
+    if state.get("ai_status") == "unavailable":
+        state["verified_findings"] = []
+        state["review_passed"] = False
+        state["steps_log"].append(
+            "REVIEW: BLOCKED - AI provider unavailable; review result is not a PASS"
+        )
+        return state
+
     candidates = state["raw_findings"] or []
     verified = []
 
@@ -400,6 +479,7 @@ Use the 0-based index into the candidate list. Omit rejected ones.
                     finding["verification"] = confirmed_map[i]
                     verified.append(finding)
         except Exception as e:
+            mark_generation_failed(state, e, "review")
             state["steps_log"].append(f"Finding verification unavailable: {friendly_llm_error(e)}")
 
     state["verified_findings"] = verified
@@ -421,7 +501,9 @@ Use the 0-based index into the candidate list. Omit rejected ones.
 
 
 def route_after_review(state: ReviewState) -> str:
-    """PASS/FAIL gate from the diagram. FAIL loops to CODING AGENT FIX."""
+    """PASS/FAIL gate. AI provider failure is a hard BLOCKED state."""
+    if state.get("ai_status") == "unavailable":
+        return "blocked"
     test_ok = state.get("test_passed", False)
     verify_ok = state.get("requirements_met", False)
     review_ok = state.get("review_passed", True)
@@ -435,6 +517,8 @@ def route_after_review(state: ReviewState) -> str:
 
 # --- Agent 7: Frontend Engineer ---
 def frontend_engineer_node(state: ReviewState) -> ReviewState:
+    if _ai_blocked(state, "BUILD"):
+        return state
     tech_stack = state.get('tech_stack') or DEFAULT_STACK
     prompt = f"""You are a React frontend engineer.
 
@@ -454,7 +538,7 @@ Respond with ONLY the code, no explanation.
         code = _clean_code_text(response.content)
     except Exception as e:
         code = f"// Frontend generation failed: {friendly_llm_error(e)}"
-        mark_generation_failed(state, e)
+        mark_generation_failed(state, e, "build")
 
     state["frontend_code"] = code
     state["steps_log"].append("BUILD: Frontend Engineer built the React UI")
@@ -465,6 +549,9 @@ Respond with ONLY the code, no explanation.
 # Generates test cases (LLM) + runs lightweight automated checks.
 # Sets test_passed used by the PASS/FAIL gate.
 def qa_engineer_node(state: ReviewState) -> ReviewState:
+    if _ai_blocked(state, "TEST"):
+        state["test_passed"] = False
+        return state
     prompt = f"""You are a QA engineer. Review this app for test coverage gaps.
 
 Backend code (summary):
@@ -481,6 +568,7 @@ Do not write actual test code, just the list.
         qa_notes = response.content.strip()
         llm_ok = True
     except Exception as e:
+        mark_generation_failed(state, e, "test")
         qa_notes = f"QA review unavailable: {friendly_llm_error(e)}"
         llm_ok = False
 
@@ -529,6 +617,8 @@ Do not write actual test code, just the list.
 
 # --- COMPLETE stage: docs + deployment in PARALLEL (independent prompts) ---
 def finalize_node(state: ReviewState) -> ReviewState:
+    if _ai_blocked(state, "COMPLETE"):
+        return state
     from concurrent.futures import ThreadPoolExecutor
 
     tech_stack = state.get('tech_stack') or DEFAULT_STACK
@@ -551,13 +641,15 @@ Respond with ONLY the Dockerfile content, no explanation.
         try:
             return _clean_code_text(_invoke_with_fallback(docs_prompt, temperature=0.3).content)
         except Exception as e:
-            return f"# Documentation generation failed: {e}"
+            mark_generation_failed(state, e, "complete")
+            return f"# Documentation generation failed: {friendly_llm_error(e)}"
 
     def run_deploy():
         try:
             return _clean_code_text(_invoke_with_fallback(deploy_prompt, temperature=0.2).content)
         except Exception as e:
-            return f"# Deployment config generation failed: {e}"
+            mark_generation_failed(state, e, "complete")
+            return f"# Deployment config generation failed: {friendly_llm_error(e)}"
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         docs_future = pool.submit(run_docs)
@@ -607,6 +699,7 @@ def build_graph():
         {
             "pass": "finalize",
             "fail": "increment_revision",
+            "blocked": END,
         },
     )
 
@@ -638,6 +731,9 @@ def initial_state(
         "api_keys": dict(api_keys or {}),
         "generation_failed": False,
         "generation_error": "",
+        "ai_status": "available",
+        "ai_error": "",
+        "ai_failed_stage": "",
         "product_spec": "",
         "architecture": "",
         "database_design": "",
@@ -666,13 +762,21 @@ def initial_state(
 # in parallel to cut one sequential LLM call per pass. The finding
 # verifier still runs after both are done.
 def verify_review_parallel_node(state: ReviewState) -> ReviewState:
-    from concurrent.futures import ThreadPoolExecutor
+    """Run verification first; only review if AI is still available.
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        verify_future = pool.submit(verifier_node, state)
-        review_future = pool.submit(reviewer_node, state)
-        state = verify_future.result()
-        state = review_future.result()
+    This intentionally avoids parallel calls. If the provider is out of quota,
+    a second concurrent request would only waste another failed request and
+    could create contradictory state mutations.
+    """
+    state = verifier_node(state)
+    if state.get("ai_status") == "unavailable":
+        state["review_passed"] = False
+        state["steps_log"].append(
+            "REVIEW: BLOCKED - verification could not run because AI is unavailable"
+        )
+        return state
+
+    state = reviewer_node(state)
     return state
 
 
@@ -702,6 +806,8 @@ FIX_NODES = (
 
 
 def is_clean(state: dict) -> bool:
+    if state.get("ai_status") == "unavailable":
+        return False
     return (
         bool(state.get("test_passed"))
         and bool(state.get("requirements_met"))
@@ -710,6 +816,8 @@ def is_clean(state: dict) -> bool:
 
 
 def needs_fix(state: dict) -> bool:
+    if state.get("ai_status") == "unavailable":
+        return False
     return (not is_clean(state)) and state.get("revision_count", 0) < state.get("max_revisions", 1)
 
 
@@ -722,22 +830,33 @@ def run_phase1(
     state = initial_state(task, tech_stack=tech_stack, db_url=db_url, api_keys=api_keys)
     for node in PHASE1_NODES:
         state = node(state)
+        if state.get("ai_status") == "unavailable":
+            break
     return state
 
 
 def run_fix_iteration(state: dict) -> dict:
     for node in FIX_NODES:
         state = node(state)
+        if state.get("ai_status") == "unavailable":
+            break
     return state
 
 
 def run_fix_loop(state: dict) -> dict:
     while needs_fix(state):
         state = run_fix_iteration(state)
+        if state.get("ai_status") == "unavailable":
+            break
     return state
 
 
 def run_finalize(state: dict) -> dict:
+    if state.get("ai_status") == "unavailable":
+        state["steps_log"].append(
+            "COMPLETE: BLOCKED - AI provider unavailable; project was not finalized"
+        )
+        return state
     return finalize_node(state)
 
 
@@ -751,6 +870,9 @@ def approval_summary(state: dict) -> dict:
         "needs_fix": needs_fix(state),
         "generation_failed": bool(state.get("generation_failed")),
         "generation_error": state.get("generation_error", ""),
+        "ai_status": state.get("ai_status", "available"),
+        "ai_error": state.get("ai_error", ""),
+        "ai_failed_stage": state.get("ai_failed_stage", ""),
         "revision_count": state.get("revision_count", 0),
         "max_revisions": state.get("max_revisions", 1),
         "verified_findings": findings,
