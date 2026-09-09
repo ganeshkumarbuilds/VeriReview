@@ -1,138 +1,200 @@
-# VeriReview — AI Software Engineering Platform
+# VeriReview
 
-VeriReview turns a plain-language task into a complete, verified software project.
-Autonomous agents plan, architect, build, test, verify, and review the code —
-then pause for your approval before fixing anything. The final build downloads
-as a runnable ZIP with a live UI preview.
+**An AI-powered Software Engineering Platform that transforms natural language prompts into production-ready, self-verified full-stack applications using a coordinated team of eleven AI agents.**
+
+Built for **InnoGenesis Hackathon 5.0 — Agentic AI Track**, hosted by the School of Computer Studies, Dr. RVR & Dr. HS MIC College / NRI Institute of Technology.
+
+---
+
+## Overview
+
+VeriReview goes a step beyond typical "prompt-to-app" generators. Most AI app builders hand you code and hope it's correct. VeriReview doesn't hope — it **verifies**.
+
+Describe an application idea in plain English, and VeriReview coordinates a pipeline of specialized AI agents to:
+
+- Turn your idea into a concrete product spec
+- Design the system architecture and data model
+- Generate real, compilable Spring Boot backend code
+- **Review its own generated code** against Spring Boot and OWASP best practices
+- **Independently re-verify every flagged issue**, rejecting false alarms before you ever see them
+- **Automatically loop back and fix confirmed high-severity issues**, up to a capped number of revisions
+- Build a matching React frontend once the backend is trustworthy
+- Review test coverage, write documentation, and prepare a deployment config
+- Package everything into a downloadable ZIP
+
+The result: an agent pipeline where the **Reviewer and Verifier agents act as the quality gate**, not just a final formality — genuinely agentic, conditional, self-correcting behavior, not a fixed one-shot pipeline.
+
+---
+
+## Why This Is Different
+
+Most AI code reviewers confidently flag issues that aren't real. VeriReview's Reviewer Agent proposes findings; its Verifier Agent independently re-examines each one against the code and knowledge base and **rejects anything that doesn't hold up** — before the developer ever sees it.
+
+On an internal evaluation harness of 10 labeled Spring Boot code samples:
+
+| Metric | Result |
+|---|---|
+| Actual bugs caught | 5 / 5 |
+| False alarms raised | 0 |
+| Bugs missed | 0 |
+| Correctly identified clean code | 5 / 5 |
+
+---
+
+
+## The Agent Pipeline
+
+Eleven specialized agents, one shared state, working in sequence — with a genuine conditional loop back to the Backend Engineer when the Verifier confirms high-severity issues.
+
+| # | Agent | Role |
+|---|---|---|
+| 1 | **Product Manager** | Turns the raw idea into a precise, buildable product spec |
+| 2 | **Architect** | Designs the system architecture, API endpoints, and page structure |
+| 3 | **Database Engineer** | Designs the data model, entities, and relationships |
+| 4 | **Backend Engineer** | Generates the complete Spring Boot backend (Entity, Repository, Service, Controller) |
+| 5 | **Retriever (RAG)** | Retrieves relevant Spring Boot and OWASP knowledge for the review step |
+| 6 | **Reviewer** *(main agent)* | Scans every generated file individually and flags potential issues |
+| 7 | **Verifier** | Skeptically re-examines each flagged issue and confirms or rejects it |
+| ↩ | **Revision Loop** | If high-severity issues are confirmed, sends targeted feedback back to the Backend Engineer (capped at 2 revisions) |
+| 8 | **Frontend Engineer** | Builds a React UI once the backend is verified |
+| 9 | **QA Engineer** | Reviews the app for test coverage gaps |
+| 10 | **Documentation Engineer** | Writes the project README |
+| 11 | **Deployment Engineer** | Generates a Dockerfile for deployment |
+
+The Reviewer → Verifier → conditional revise-or-continue step is implemented as a genuine **LangGraph conditional edge** — a real decision point, not a scripted sequence.
+
+---
 
 ## Features
 
-- **Agent pipeline** — Plan → Architect → Build → Test → Verify → Review → Complete,
-  with an automatic fix-and-retest loop (up to 2 revision rounds).
-- **Human approval gate** — verify + review results are shown first; the coding
-  agent only fixes files after you click *Approve AI fix*. Skipping packages
-  the build as-is.
-- **Per-user workspaces** — every run is owned by its creator's account.
-  Users only ever see their own history, stats, and downloads.
-- **Runnable ZIP exports** — backend sources plus known-good scaffolding
-  (`pom.xml` / `requirements.txt` / `package.json`), app config wired to env
-  vars, `Dockerfile`, `docker-compose.yml` (app + Postgres), `.env` /
-  `.env.example`, frontend Vite shell, and a standalone `preview.html`.
-- **Live UI preview** — the generated React screen renders in-app (mocked API
-  data) and inside the ZIP with zero setup.
-- **Stack-aware generation** — Spring Boot, Django, Flask/FastAPI, Node/Express
-  (or generic). Mention the stack in your task and it's auto-detected;
-  otherwise enter it in the Tech stack field.
-- **Per-run secrets** — Database URL and API keys are requested on every run
-  and baked into the ZIP's `.env` (never exposed to other users or in
-  `.env.example`).
+- Multi-agent AI software engineering pipeline (11 agents)
+- Natural language to full-stack application generation
+- Self-verifying code review with false-positive rejection
+- Autonomous revision loop — the Reviewer can send code back to the Backend Engineer
+- RAG-grounded reviews (Spring Boot + OWASP knowledge base via ChromaDB)
+- Live agent status streaming over WebSocket
+- Per-file bug detection with confirmed/rejected verdicts
+- Automatic Spring Boot backend generation
+- Automatic React frontend generation
+- Automatic README and Dockerfile generation
+- PostgreSQL-backed project history and stats dashboard
+- Downloadable ZIP export of the full generated project
+- Internal evaluation harness with measurable accuracy metrics
+- Automatic fallback across multiple free-tier LLMs for reliability
+
+---
 
 ## Tech Stack
 
-| Layer    | Technology                                                              |
-| -------- | ----------------------------------------------------------------------- |
-| Backend  | Python, FastAPI, LangGraph (agent orchestration), SQLAlchemy, ChromaDB  |
-| Frontend | React 18, Vite, React Router                                            |
-| AI       | OpenRouter (free models) via LangChain                                  |
-| Database | PostgreSQL                                                              |
+**Backend**
+- Python, FastAPI
+- LangGraph (agent orchestration)
+- ChromaDB (RAG vector store)
+- OpenRouter API (free-tier LLMs with automatic fallback)
+- SQLAlchemy + PostgreSQL
+- WebSockets (live agent streaming)
+
+**Frontend**
+- React + Vite
+- Tailwind CSS
+- React Router
+
+**AI**
+- OpenRouter free-tier models (automatic multi-model fallback for reliability)
+- Retrieval-Augmented Generation grounded in Spring Boot and OWASP documentation
+
+---
 
 ## Project Structure
 
-```text
-backend/
-  main.py            # FastAPI app: review pipeline, approval gate, export, preview
-  app/
-    graph.py         # agent nodes + phase orchestration (phase1 / fix loop / finalize)
-    scaffold.py      # static ZIP scaffolding per stack (Docker, compose, env, README)
-    database.py      # TaskRecord model + migrations
-    rag.py           # local Spring/OWASP knowledge base (ChromaDB)
-    config.py        # LLM client + model list
-    state.py         # pipeline state schema
-    file_utils.py    # multi-marker source-file parser (// FILE: and # FILE:)
-  requirements.txt
-  .env.example       # copy to .env and fill in (never commit .env)
-frontend/
-  src/
-    pages/           # Dashboard (workspace + approval), Review, History, Auth
-    components/      # ApprovalCard, PreviewModal, Navbar, Footer, ...
-    utils/           # download, preview builder, tech-stack detection
-    context/         # local demo auth
-  .env.example       # VITE_API_URL (backend URL)
+```
+verireview/
+│
+├── backend/
+│   ├── app/
+│   │   ├── config.py         # LLM client + free-model fallback list
+│   │   ├── state.py          # LangGraph shared state schema
+│   │   ├── graph.py          # 11-agent LangGraph pipeline
+│   │   ├── rag.py            # ChromaDB retrieval (Spring/OWASP knowledge)
+│   │   ├── file_utils.py     # Multi-file code parsing
+│   │   └── database.py       # PostgreSQL models
+│   ├── eval/
+│   │   ├── cases.py          # Labeled evaluation test cases
+│   │   └── run_eval.py       # Evaluation harness runner
+│   ├── main.py                # FastAPI app + WebSocket endpoint
+│   ├── requirements.txt
+│   └── .env
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/       # Navbar, Footer, AgentStatusPanel
+│   │   ├── context/          # Auth context
+│   │   ├── pages/            # Home, Login, Register, Review, History, Dashboard
+│   │   ├── App.jsx
+│   │   └── index.css
+│   └── package.json
+│
+├── screenshots/
+└── README.md
 ```
 
-## Quickstart
+Run the backend:
 
-### Prerequisites
-
-- Python 3.11+ with a virtualenv, Node.js 18+, PostgreSQL 14+.
-
-### 1. Backend
-
-```powershell
-cd backend
-.\venv\Scripts\Activate.ps1   # or: python -m venv venv; venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env        # then set LLM_API_KEY and DATABASE_URL
-python -m uvicorn main:app --host 127.0.0.1 --port 8000
+```bash
+uvicorn main:app --reload
 ```
 
-### 2. Frontend
+### Frontend setup
 
-```powershell
+```bash
 cd frontend
 npm install
-copy .env.example .env        # VITE_API_URL=http://localhost:8000 for local dev
-npm run dev                   # open http://localhost:5173
+npm run dev
 ```
 
-### 3. Run a task
+Open `http://localhost:5173` in your browser.
 
-1. Register / sign in.
-2. On the Dashboard, describe the task (mention the stack, e.g. *“Django + React…”*,
-   or fill the **Tech stack** field), add **Database URL** and **API keys** if the
-   project needs them, and start the workflow.
-3. When verify + review finish, an approval card shows every finding —
-   **Approve AI fix** or **Finish without fixing**.
-4. After the final re-verify, a clean *“No bugs or errors”* result unlocks the
-   **Download ZIP** button; **Watch preview** renders the generated UI anytime.
+### Run the evaluation harness
 
-## API Overview
+```bash
+cd backend
+python eval/run_eval.py
+```
 
-| Method | Endpoint                  | Purpose                                              |
-| ------ | ------------------------- | ---------------------------------------------------- |
-| POST   | `/review/phase1`          | Build → test → verify → review, pause for approval   |
-| GET    | `/review/pending/{id}`    | Resume data for a paused run                         |
-| POST   | `/review/decide`          | Approve (fix + re-verify + package) or skip fixing   |
-| POST   | `/review`                 | Legacy single-shot run (no approval gate)            |
-| GET    | `/history`, `/stats`      | Per-user run history and totals (`?owner=` / header) |
-| GET    | `/task/{id}`              | Full run details (owner-checked)                     |
-| GET    | `/export/{id}`            | Runnable project ZIP (owner-checked)                 |
-| GET    | `/preview/{id}`           | Standalone preview page (owner-checked)              |
-| WS     | `/ws/review`              | Streaming run with in-band approval step             |
+---
 
-All user-scoped routes accept the identity via `?owner=` query or the
-`X-User-Email` header. Calls without an owner receive empty results —
-project data is never shared across accounts.
+## How Verification Works
 
-## Deployment
+1. The **Backend Engineer** generates multiple Java files (Entity, Repository, Service, Controller).
+2. The **Reviewer** scans each file independently against retrieved Spring Boot and OWASP knowledge, producing candidate findings tagged by file, category, and severity.
+3. The **Verifier** re-examines every candidate finding in isolation, asking: *is this a real, justified issue, or a false alarm?* Only confirmed findings survive.
+4. If any confirmed finding is high severity and revision budget remains, the **Reviewer's decision routes the pipeline back to the Backend Engineer** with the specific issues to fix — a real conditional edge in the LangGraph, not a fixed script.
+5. Once the backend passes verification (or the revision cap is reached), the **Frontend Engineer** builds the UI against the trustworthy backend.
 
-- **Backend** (Render / Railway / Fly, root `backend/`): build
-  `pip install -r requirements.txt`, start
-  `uvicorn main:app --host 0.0.0.0 --port $PORT`, with env vars
-  `LLM_API_KEY` and `DATABASE_URL` (hosted Postgres).
-- **Frontend** (Vercel / Netlify, root `frontend/`): build `npm run build`,
-  output `dist`, env var `VITE_API_URL=https://<your-backend>` (rebuild after
-  setting — Vite bakes it in at build time).
+---
 
-## Security Notes
+## Roadmap
 
-- Never commit `.env` files — only `.env.example` templates are tracked.
-- Rotate any API key or DB password that was ever committed or pasted into chat.
-- Generated ZIPs embed the run's real secrets in `.env` (git-ignored inside the
-  ZIP layout); share only `.env.example`.
-- Auth is a local demo (localStorage); plug in real authentication before any
-  public deployment.
+- [ ] GitHub PR import — review real production pull requests
+- [ ] Automated test generation and execution (self-verifying via real test runs)
+- [ ] Multiple LLM provider selection in-app
+- [ ] Team collaboration and shared project workspaces
+- [ ] One-click cloud deployment
+- [ ] CI/CD pipeline generation
+- [ ] Project versioning and diff comparison across generations
+
+---
+
+## Hackathon
+
+This project was built for **InnoGenesis Hackathon 5.0**, Agentic AI Track, organized by the School of Computer Studies, Dr. RVR & Dr. HS MIC College (Deemed to be University), held on 7th–8th August 2026.
+
+## Developer
+
+**Ch. Ganesh Kumar**
+Java Full-Stack Developer
+[github.com/ganeshkumarbuilds](https://github.com/ganeshkumarbuilds)
 
 ## License
 
-Proprietary — all rights reserved unless stated otherwise.
+This project was developed for InnoGenesis Hackathon 5.0.
