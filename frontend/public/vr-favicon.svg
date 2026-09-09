@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="vr-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#vr-g)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="13.5" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="2"/>
+  <text x="29" y="42" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="25" font-weight="800" letter-spacing="-1" fill="#ffffff" text-anchor="middle">VR</text>
+  <circle cx="47" cy="47" r="11.5" fill="#34d399" stroke="#0b0d17" stroke-width="3"/>
+  <path d="M42.3 47.2l3.3 3.3 6-6.8" fill="none" stroke="#052e22" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

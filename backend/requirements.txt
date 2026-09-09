@@ -1,0 +1,17 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+langgraph==0.2.39
+langchain-core==1.6.2
+langchain-openai==1.6.0
+langchain-anthropic==0.2.3
+chromadb==0.5.15
+sentence-transformers==3.2.1
+SQLAlchemy==2.0.52
+psycopg2-binary==2.9.12
+alembic==1.19.2
+PyGithub==2.4.0
+python-dotenv==1.0.1
+pydantic==2.9.2
+websockets==17.1
+requests==2.34.2
+openai==3.8.0

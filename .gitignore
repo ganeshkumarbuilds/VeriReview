@@ -1,0 +1,23 @@
+# Dependencies & build output
+node_modules/
+dist/
+backend/venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+
+# Secrets — never commit real keys
+backend/.env
+frontend/.env
+*.env
+!.env.example
+backend/backend_logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local test artifacts
+backend/value
