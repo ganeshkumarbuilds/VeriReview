@@ -218,6 +218,7 @@ export default function Dashboard() {
   const [stackInput, setStackInput] = useState("");
   const [dbUrl, setDbUrl] = useState("");
   const [apiKeysText, setApiKeysText] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
