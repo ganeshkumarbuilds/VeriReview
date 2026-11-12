@@ -1,0 +1,23 @@
+# VeriReview Backend Dependencies
+
+# API Framework
+fastapi
+uvicorn[standard]
+
+# Database
+sqlalchemy>=2.0,<3.0
+alembic
+psycopg[binary]>=3.2
+
+# Configuration
+pydantic-settings
+python-dotenv
+
+# Authentication and Security
+pwdlib[argon2]
+PyJWT
+email-validator
+
+# Agent Orchestration
+langgraph==1.2.20
+langgraph-checkpoint-postgres==3.2.0

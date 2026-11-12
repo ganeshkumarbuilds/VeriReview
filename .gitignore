@@ -1,0 +1,102 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+coverage/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.broken-backup
+
+# Operating system
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Generated application data
+storage/
+uploads/
+generated_projects/
+*.sqlite3
+
+# Test artifacts
+test-results/
+playwright-report/
+```
+
+**Important:** If your application stores required source files in any of these directories, we'll adjust the ignore rules before committing.
+
+## Step 2 — Check what Git will track
+
+Run:
+
+```cmd
+git status --short
+```
+
+Then:
+
+```cmd
+git status --ignored --short
+```
+
+Send me the output.
+
+## Step 3 — Create the first commit
+
+We'll do this only after checking that:
+- `.env` files are excluded.
+- `.venv` is excluded.
+- `node_modules` is excluded.
+- All actual source code and tests are included.
+
+Then we'll create your first local checkpoint:
+
+```cmd
+git add .
+git commit -m "Initial VeriReview backend and frontend implementation"
+```
+
+---
+
+### VeriReview milestone
+
+| Task | Status |
+|---|---|
+| Recover GitHub import implementation | Complete |
+| GitHub import tests | 28/28 passed |
+| Combined integration tests | 41/41 passed |
+| Initialize local Git | Complete |
+| Configure `.gitignore` | In progress |
+| First local commit | Pending |
+
+**One important habit from now on:** After every major feature that passes its tests, we'll create a Git commit. That gives us a reliable recovery point throughout VeriReview development.
